@@ -18,6 +18,7 @@ import type { Document } from './bson';
 import type { IndexSpecification, IndexDirection } from './operations/indexes';
 import type { MongoClient } from './mongo_client';
 import type { Cursor } from './cursor/cursor';
+import type { CommandOperationOptions, OperationParent } from './operations/command';
 
 /**
  * MongoDB Driver style callback
@@ -1115,4 +1116,37 @@ export function hasAtomicOperators(doc: Document | Document[]): boolean {
 
   const keys = Object.keys(doc);
   return keys.length > 0 && keys[0][0] === '$';
+}
+
+/** @internal */
+export function resolveInheritedOptions<T extends CommandOperationOptions>(
+  parent: OperationParent,
+  options?: T
+): T {
+  const result: T = Object.assign({}, options);
+  const session = result.session;
+
+  // prioritize inheritable options from transactions
+  if (
+    session &&
+    session.inTransaction() &&
+    typeof session.transaction.options.readPreference !== 'undefined'
+  ) {
+    result.readPreference = session.transaction.options.readPreference;
+  } else if (
+    typeof result.readPreference === 'undefined' &&
+    typeof parent.readPreference !== 'undefined'
+  ) {
+    result.readPreference = parent.readPreference;
+  }
+
+  if (typeof result.readConcern === 'undefined' && typeof parent.readConcern !== 'undefined') {
+    result.readConcern = parent.readConcern;
+  }
+
+  if (typeof result.writeConcern === 'undefined' && typeof parent.writeConcern !== 'undefined') {
+    result.readConcern = parent.readConcern;
+  }
+
+  return result;
 }

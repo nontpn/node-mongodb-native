@@ -77,9 +77,15 @@ export abstract class CommandOperation<
     this.readPreference = this.hasAspect(Aspect.WRITE_OPERATION)
       ? ReadPreference.primary
       : ReadPreference.resolve(propertyProvider, this.options);
-    this.readConcern = resolveReadConcern(propertyProvider, this.options);
-    this.writeConcern = resolveWriteConcern(propertyProvider, this.options);
-    this.explain = false;
+
+    if (typeof options?.explain === 'boolean') {
+      this.explain = options.explain;
+    } else {
+      this.explain = false;
+      this.readConcern = resolveReadConcern(propertyProvider, this.options);
+      this.writeConcern = resolveWriteConcern(propertyProvider, this.options);
+    }
+
     this.fullResponse =
       options && typeof options.fullResponse === 'boolean' ? options.fullResponse : false;
 

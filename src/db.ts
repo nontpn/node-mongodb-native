@@ -1,7 +1,7 @@
 import { deprecate } from 'util';
-import { emitDeprecatedOptionWarning, Callback } from './utils';
+import { emitDeprecatedOptionWarning, Callback, resolveInheritedOptions } from './utils';
 import { loadAdmin } from './dynamic_loaders';
-import { AggregationCursor, CommandCursor } from './cursor';
+import { AggregationCursor } from './cursor';
 import { ObjectId, Code, Document, BSONSerializeOptions, resolveBSONOptions } from './bson';
 import { ReadPreference, ReadPreferenceLike } from './read_preference';
 import { MongoError } from './error';
@@ -18,7 +18,7 @@ import {
   MongoDBNamespace,
   getTopology
 } from './utils';
-import { AggregateOperation, AggregateOptions } from './operations/aggregate';
+import type { AggregateOptions } from './operations/aggregate';
 import { AddUserOperation, AddUserOptions } from './operations/add_user';
 import { CollectionsOperation } from './operations/collections';
 import { DbStatsOperation, DbStatsOptions } from './operations/stats';
@@ -41,7 +41,7 @@ import {
   DropDatabaseOptions,
   DropCollectionOptions
 } from './operations/drop';
-import { ListCollectionsOperation, ListCollectionsOptions } from './operations/list_collections';
+import { ListCollectionsCursor, ListCollectionsOptions } from './operations/list_collections';
 import { ProfilingLevelOperation, ProfilingLevelOptions } from './operations/profiling_level';
 import { RemoveUserOperation, RemoveUserOptions } from './operations/remove_user';
 import { RenameOperation, RenameOptions } from './operations/rename';
@@ -308,14 +308,7 @@ export class Db implements OperationParent {
     }
 
     options = options || {};
-
-    const cursor = new AggregationCursor(
-      getTopology(this),
-      new AggregateOperation(this, pipeline, options),
-      options
-    );
-
-    return cursor;
+    return new AggregationCursor(this, getTopology(this), pipeline, options);
   }
 
   /** Return the Admin db instance */
@@ -425,15 +418,8 @@ export class Db implements OperationParent {
    * @param filter - Query to filter collections by
    * @param options - Optional settings for the command
    */
-  listCollections(filter?: Document, options?: ListCollectionsOptions): CommandCursor {
-    filter = filter || {};
-    options = options || {};
-
-    return new CommandCursor(
-      getTopology(this),
-      new ListCollectionsOperation(this, filter, options),
-      options
-    );
+  listCollections(filter?: Document, options?: ListCollectionsOptions): ListCollectionsCursor {
+    return new ListCollectionsCursor(this, filter || {}, resolveInheritedOptions(this, options));
   }
 
   /**
