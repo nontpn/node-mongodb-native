@@ -1,5 +1,5 @@
 /** @public */
-export type W = number | 'majority';
+export type W = number | 'majority' | string;
 
 /** @public */
 export interface WriteConcernOptions {

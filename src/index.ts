@@ -179,16 +179,15 @@ export type {
   GridFSBucketWriteStream
 } from './gridfs-stream/upload';
 export type { LoggerOptions, LoggerFunction, LoggerLevel } from './logger';
+export type { MongoClientPrivate, WithSessionCallback } from './mongo_client';
 export type {
-  MongoClientPrivate,
   MongoClientOptions,
-  WithSessionCallback,
   PkFactory,
   MongoURIOptions,
   LogLevel,
   Auth,
   DriverInfo
-} from './mongo_client';
+} from './mongo_client_options';
 export type { AddUserOptions } from './operations/add_user';
 export type {
   AggregateOptions,

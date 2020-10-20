@@ -16,7 +16,7 @@ import {
   maybePromise
 } from './utils';
 import type { Topology } from './sdam/topology';
-import type { MongoClientOptions } from './mongo_client';
+import type { MongoClientOptions } from './mongo_client_options';
 import type { Cursor } from './cursor/cursor';
 import type { CoreCursor } from './cursor/core_cursor';
 import type { WriteCommandOptions } from './cmap/wire_protocol/write_command';

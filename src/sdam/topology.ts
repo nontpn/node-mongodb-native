@@ -56,7 +56,7 @@ import type { LoggerOptions } from '../logger';
 import { DestroyOptions, Connection } from '../cmap/connection';
 import { RunCommandOperation } from '../operations/run_command';
 import type { CursorOptions } from '../cursor/cursor';
-import type { MongoClientOptions } from '../mongo_client';
+import type { MongoClientOptions } from '../mongo_client_options';
 
 // Global state
 let globalTopologyCounter = 0;

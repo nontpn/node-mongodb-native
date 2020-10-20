@@ -82,7 +82,7 @@ import type { OperationOptions, Hint } from './operations/operation';
 import type { IndexInformationOptions } from './operations/common_functions';
 import type { CountOptions } from './operations/count';
 import type { BulkWriteResult, BulkWriteOptions, AnyBulkWriteOperation } from './bulk/common';
-import type { PkFactory } from './mongo_client';
+import type { PkFactory } from './mongo_client_options';
 import type { Topology } from './sdam/topology';
 import type { Logger, LoggerOptions } from './logger';
 import type { OperationParent } from './operations/command';

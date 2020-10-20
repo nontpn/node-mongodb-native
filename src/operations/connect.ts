@@ -12,7 +12,7 @@ import * as BSON from '../bson';
 import type { Document } from '../bson';
 import type { MongoClient } from '../mongo_client';
 import { ConnectionOptions, Connection } from '../cmap/connection';
-import type { AuthMechanism } from '../cmap/auth/defaultAuthProviders';
+import type { AuthMechanismId } from '../cmap/auth/defaultAuthProviders';
 import { Server } from '../sdam/server';
 
 const VALID_AUTH_MECHANISMS = new Set([
@@ -442,7 +442,7 @@ export interface GenerateCredentialsOptions {
   authSource: string;
   authdb: string;
   dbName: string;
-  authMechanism: AuthMechanism;
+  authMechanism: AuthMechanismId;
   authMechanismProperties: Document;
 }
 
@@ -468,7 +468,7 @@ function generateCredentials(
   }
 
   return new MongoCredentials({
-    mechanism: authMechanism as AuthMechanism,
+    mechanism: authMechanism as AuthMechanismId,
     mechanismProperties,
     source,
     username,

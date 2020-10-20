@@ -52,7 +52,7 @@ import {
 import { executeOperation } from './operations/execute_operation';
 import { EvalOperation, EvalOptions } from './operations/eval';
 import type { IndexInformationOptions } from './operations/common_functions';
-import type { PkFactory } from './mongo_client';
+import type { PkFactory } from './mongo_client_options';
 import type { Topology } from './sdam/topology';
 import type { OperationParent } from './operations/command';
 import type { Admin } from './admin';
