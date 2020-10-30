@@ -42,5 +42,11 @@
         "augments": "extends"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+        "files": ["*.mjs"],
+        "parserOptions": {"sourceType": "module"}
+    }
+]
 }
