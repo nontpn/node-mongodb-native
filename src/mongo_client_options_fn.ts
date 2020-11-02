@@ -465,7 +465,14 @@ const ALL_OPTION_NAMES = new Map(
 );
 
 export function transform(name: string, values: unknown[]): Readonly<MongoOptions> {
-  const finalOptions: MongoOptions = {} as MongoOptions;
+  const finalOptions: MongoOptions = {
+    toJSON(): Record<string, any> {
+      return this as  Record<string, any>;
+    },
+    toURI() {
+      return '';
+    }
+  } as unknown as MongoOptions;
   const properName = ALL_OPTION_NAMES.get(name.toLowerCase()) as keyof MongoOptions;
   if (!properName) {
     throw new TypeError(`wtf is ${name}`);
@@ -584,4 +591,6 @@ interface MongoOptions {
   waitQueueTimeoutMS: number;
   writeConcern: WriteConcern;
   zlibCompressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | undefined;
+  toJSON(): Record<string, any>
+  toURI(): Record<string, any>
 }
