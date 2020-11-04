@@ -1223,6 +1223,7 @@ export class Collection implements OperationParent {
     return new AggregationCursor(
       this,
       getTopology(this),
+      this.s.namespace,
       pipeline,
       resolveInheritedOptions(this, options)
     );

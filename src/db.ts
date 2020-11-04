@@ -308,7 +308,7 @@ export class Db implements OperationParent {
     }
 
     options = options || {};
-    return new AggregationCursor(this, getTopology(this), pipeline, options);
+    return new AggregationCursor(this, getTopology(this), this.s.namespace, pipeline, options);
   }
 
   /** Return the Admin db instance */
