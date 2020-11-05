@@ -439,6 +439,34 @@ export abstract class AbstractCursor extends EventEmitter {
     options: AbstractCursorOptions,
     callback: Callback<ExecutionResult>
   ): void;
+
+  /* @internal */
+  _getMore(batchSize: number, callback: Callback<Document>): void {
+    const cursorId = this[kId];
+    const cursorNs = this[kNamespace];
+    const server = this[kServer];
+
+    if (cursorId == null) {
+      callback(new MongoError('Unable to iterate cursor with no id'));
+      return;
+    }
+
+    if (server == null) {
+      callback(new MongoError('Unable to iterate cursor without selected server'));
+      return;
+    }
+
+    server.getMore(
+      cursorNs.toString(),
+      cursorId,
+      {
+        ...this[kOptions],
+        session: this[kSession],
+        batchSize
+      },
+      callback
+    );
+  }
 }
 
 /* @internal */
@@ -447,8 +475,6 @@ export interface ExecutionResult {
   server: Server;
   /** The session used for this operation, may be implicitly created */
   session?: ClientSession;
-  /** The namespace for the operation, this is only needed for pre-3.2 servers which don't use commands */
-  namespace: MongoDBNamespace;
   /** The raw server response for the operation */
   response: Document;
 }
@@ -474,10 +500,14 @@ function nextDocument(cursor: AbstractCursor): Document | null | undefined {
 function next(cursor: AbstractCursor, callback: Callback<Document | null>): void {
   const cursorId = cursor[kId];
   const cursorNs = cursor[kNamespace];
-  const server = cursor[kServer];
 
   if (cursor.closed) {
     return callback(undefined, null);
+  }
+
+  if (cursor[kDocuments].length) {
+    callback(undefined, nextDocument(cursor));
+    return;
   }
 
   if (cursorId == null) {
@@ -526,11 +556,6 @@ function next(cursor: AbstractCursor, callback: Callback<Document | null>): void
     return;
   }
 
-  if (cursor[kDocuments].length) {
-    callback(undefined, nextDocument(cursor));
-    return;
-  }
-
   if (cursorId.isZero() || cursorNs == null) {
     cursor.emit(AbstractCursor.CLOSE);
     cursor[kClosed] = true;
@@ -546,54 +571,41 @@ function next(cursor: AbstractCursor, callback: Callback<Document | null>): void
   }
 
   // otherwise need to call getMore
-  if (server == null) {
-    callback(new MongoError('unable to iterate cursor without pinned server'));
-    return;
-  }
+  const batchSize = cursor[kOptions].batchSize || 1000;
+  cursor._getMore(batchSize, (err, response) => {
+    if (response) {
+      const cursorId =
+        typeof response.cursor.id === 'number'
+          ? Long.fromNumber(response.cursor.id)
+          : response.cursor.id;
 
-  server.getMore(
-    cursorNs.toString(),
-    cursorId,
-    {
-      session: cursor[kSession],
-      ...cursor[kOptions],
-      batchSize: cursor[kOptions].batchSize || 1000 // TODO: there should be no default here
-    },
-    (err, response) => {
-      if (response) {
-        const cursorId =
-          typeof response.cursor.id === 'number'
-            ? Long.fromNumber(response.cursor.id)
-            : response.cursor.id;
+      cursor[kDocuments] = response.cursor.nextBatch;
+      cursor[kId] = cursorId;
+    }
 
-        cursor[kDocuments] = response.cursor.nextBatch;
-        cursor[kId] = cursorId;
-      }
-
-      if (err || (cursor.id && cursor.id.isZero())) {
-        if (cursor[kDocuments].length === 0) {
-          cursor.emit(AbstractCursor.CLOSE);
-          cursor[kClosed] = true;
-        }
-
-        const session = cursor[kSession];
-        if (session && session.owner === cursor) {
-          session.endSession(() => callback(err, nextDocument(cursor)));
-        } else {
-          callback(err, nextDocument(cursor));
-        }
-
-        return;
-      }
-
+    if (err || (cursor.id && cursor.id.isZero())) {
       if (cursor[kDocuments].length === 0) {
         cursor.emit(AbstractCursor.CLOSE);
         cursor[kClosed] = true;
       }
 
-      callback(err, nextDocument(cursor));
+      const session = cursor[kSession];
+      if (session && session.owner === cursor) {
+        session.endSession(() => callback(err, nextDocument(cursor)));
+      } else {
+        callback(err, nextDocument(cursor));
+      }
+
+      return;
     }
-  );
+
+    if (cursor[kDocuments].length === 0) {
+      cursor.emit(AbstractCursor.CLOSE);
+      cursor[kClosed] = true;
+    }
+
+    callback(err, nextDocument(cursor));
+  });
 }
 
 function makeCursorStream(cursor: AbstractCursor) {

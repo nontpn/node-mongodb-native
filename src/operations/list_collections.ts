@@ -139,7 +139,6 @@ export class ListCollectionsCursor extends AbstractCursor {
       // NOTE: `executeOperation` should be improved to allow returning an intermediate
       //       representation including the selected server, session, and server response.
       callback(undefined, {
-        namespace: operation.ns,
         server: operation.server,
         session,
         response

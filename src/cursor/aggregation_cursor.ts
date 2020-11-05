@@ -58,7 +58,6 @@ export class AggregationCursor extends AbstractCursor {
       // NOTE: `executeOperation` should be improved to allow returning an intermediate
       //       representation including the selected server, session, and server response.
       callback(undefined, {
-        namespace: aggregateOperation.ns,
         server: aggregateOperation.server,
         session,
         response

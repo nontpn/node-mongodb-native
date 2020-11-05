@@ -13,6 +13,8 @@ import { AbstractCursor, AbstractCursorOptions, ExecutionResult } from './abstra
 
 /** @internal */
 const kFilter = Symbol('filter');
+const kNumReturned = Symbol('numReturned');
+const kBuiltOptions = Symbol('builtOptions');
 
 /** @public Flags allowed for cursor */
 export const FLAGS = [
@@ -24,9 +26,21 @@ export const FLAGS = [
   'partial'
 ] as const;
 
+// function calculateFirstNumberToReturn(options: FindOptions): number {
+//   const limit = options.limit || 0;
+//   const batchSize = options.batchSize || 0;
+
+//   if (limit < 0 || batchSize === 0 || limit < batchSize) {
+//     return limit;
+//   }
+
+//   return batchSize;
+// }
+
 export class FindCursor extends AbstractCursor {
   [kFilter]: Document;
-  options: FindOptions;
+  [kNumReturned]?: number;
+  [kBuiltOptions]: FindOptions;
 
   constructor(
     topology: Topology,
@@ -37,10 +51,10 @@ export class FindCursor extends AbstractCursor {
     super(topology, namespace, options);
 
     this[kFilter] = filter || {};
-    this.options = options;
+    this[kBuiltOptions] = options;
 
     if (typeof options.sort !== 'undefined') {
-      this.options.sort = formatSort(options.sort);
+      this[kBuiltOptions].sort = formatSort(options.sort);
     }
   }
 
@@ -50,25 +64,59 @@ export class FindCursor extends AbstractCursor {
     options: AbstractCursorOptions,
     callback: Callback<ExecutionResult>
   ): void {
-    this.options = Object.freeze(this.options);
+    this[kBuiltOptions] = Object.freeze(this[kBuiltOptions]);
 
     const findOperation = new FindOperation(undefined, this.namespace, this[kFilter], {
-      session,
-      ...this.options, // NOTE: order matters here, we may need to refine this
-      ...options
+      ...this[kBuiltOptions], // NOTE: order matters here, we may need to refine this
+      ...options,
+      session
+
+      // batchSize: calculateFirstNumberToReturn(this.options)
     });
 
     executeOperation(this.topology, findOperation, (err, response) => {
       if (err || response == null) return callback(err);
 
+      // FIXME: wrap this in some check for whether we actually need it
+      this[kNumReturned] = response.cursor
+        ? response.cursor.firstBatch.length
+        : response.documents
+        ? response.documents.length
+        : 0;
+
       // NOTE: `executeOperation` should be improved to allow returning an intermediate
       //       representation including the selected server, session, and server response.
       callback(undefined, {
-        namespace: findOperation.ns,
         server: findOperation.server,
         session,
         response
       });
+    });
+  }
+
+  /** @internal */
+  _getMore(batchSize: number, callback: Callback<Document>): void {
+    // NOTE: this is to support client provided limits in pre-command servers
+    const numReturned = this[kNumReturned];
+    if (numReturned) {
+      const limit = this[kBuiltOptions].limit;
+      batchSize =
+        limit && limit > 0 && numReturned + batchSize > limit ? limit - numReturned : batchSize;
+
+      if (batchSize <= 0) {
+        return this.close(callback);
+      }
+    }
+
+    super._getMore(batchSize, (err, response) => {
+      if (err) return callback(err);
+
+      // FIXME: wrap this in some logic to prevent it from happening if we don't need this support
+      if (response) {
+        this[kNumReturned] = this[kNumReturned] + response.cursor.nextBatch;
+      }
+
+      callback(undefined, response);
     });
   }
 
@@ -99,7 +147,10 @@ export class FindCursor extends AbstractCursor {
 
     return executeOperation(
       this.topology,
-      new CountOperation(this, this[kFilter], Object.assign({}, options, this.options)),
+      new CountOperation(this, this[kFilter], {
+        ...this[kBuiltOptions],
+        ...options
+      }),
       callback
     );
   }
@@ -116,9 +167,9 @@ export class FindCursor extends AbstractCursor {
     return executeOperation(
       this.topology,
       new FindOperation(undefined, this.namespace, this[kFilter], {
-        explain: true,
         // session,
-        ...this.options
+        ...this[kBuiltOptions],
+        explain: true
       }),
       callback
     );
@@ -136,7 +187,7 @@ export class FindCursor extends AbstractCursor {
    * @param hint - If specified, then the query system will only consider plans using the hinted index.
    */
   hint(hint: Hint): this {
-    this.options.hint = hint;
+    this[kBuiltOptions].hint = hint;
     return this;
   }
 
@@ -146,7 +197,7 @@ export class FindCursor extends AbstractCursor {
    * @param min - Specify a $min value to specify the inclusive lower bound for a specific index in order to constrain the results of find(). The $min specifies the lower bound for all keys of a specific index in order.
    */
   min(min: number): this {
-    this.options.min = min;
+    this[kBuiltOptions].min = min;
     return this;
   }
 
@@ -156,7 +207,7 @@ export class FindCursor extends AbstractCursor {
    * @param max - Specify a $max value to specify the exclusive upper bound for a specific index in order to constrain the results of find(). The $max specifies the upper bound for all keys of a specific index in order.
    */
   max(max: number): this {
-    this.options.max = max;
+    this[kBuiltOptions].max = max;
     return this;
   }
 
@@ -168,7 +219,7 @@ export class FindCursor extends AbstractCursor {
    * @param value - the returnKey value.
    */
   returnKey(value: boolean): this {
-    this.options.returnKey = value;
+    this[kBuiltOptions].returnKey = value;
     return this;
   }
 
@@ -178,7 +229,7 @@ export class FindCursor extends AbstractCursor {
    * @param value - The $showDiskLoc option has now been deprecated and replaced with the showRecordId field. $showDiskLoc will still be accepted for OP_QUERY stye find.
    */
   showRecordId(value: boolean): this {
-    this.options.showRecordId = value;
+    this[kBuiltOptions].showRecordId = value;
     return this;
   }
 
@@ -199,31 +250,31 @@ export class FindCursor extends AbstractCursor {
     // NOTE: consider some TS magic for this
     switch (field) {
       case 'comment':
-        this.options.comment = value as string | Document;
+        this[kBuiltOptions].comment = value as string | Document;
         break;
 
       case 'explain':
-        this.options.explain = value as boolean;
+        this[kBuiltOptions].explain = value as boolean;
         break;
 
       case 'hint':
-        this.options.hint = value as string | Document;
+        this[kBuiltOptions].hint = value as string | Document;
         break;
 
       case 'max':
-        this.options.max = value as number;
+        this[kBuiltOptions].max = value as number;
         break;
 
       case 'maxTimeMS':
-        this.options.maxTimeMS = value as number;
+        this[kBuiltOptions].maxTimeMS = value as number;
         break;
 
       case 'min':
-        this.options.min = value as number;
+        this[kBuiltOptions].min = value as number;
         break;
 
       case 'orderby':
-        this.options.sort = formatSort(value as string | Document);
+        this[kBuiltOptions].sort = formatSort(value as string | Document);
         break;
 
       case 'query':
@@ -231,11 +282,11 @@ export class FindCursor extends AbstractCursor {
         break;
 
       case 'returnKey':
-        this.options.returnKey = value as boolean;
+        this[kBuiltOptions].returnKey = value as boolean;
         break;
 
       case 'showDiskLoc':
-        this.options.showRecordId = value as boolean;
+        this[kBuiltOptions].showRecordId = value as boolean;
         break;
 
       default:
@@ -251,7 +302,7 @@ export class FindCursor extends AbstractCursor {
    * @param value - The comment attached to this query.
    */
   comment(value: string): this {
-    this.options.comment = value;
+    this[kBuiltOptions].comment = value;
     return this;
   }
 
@@ -265,7 +316,7 @@ export class FindCursor extends AbstractCursor {
       throw new MongoError('maxAwaitTimeMS must be a number');
     }
 
-    this.options.maxAwaitTimeMS = value;
+    this[kBuiltOptions].maxAwaitTimeMS = value;
     return this;
   }
 
@@ -279,7 +330,7 @@ export class FindCursor extends AbstractCursor {
       throw new MongoError('maxTimeMS must be a number');
     }
 
-    this.options.maxTimeMS = value;
+    this[kBuiltOptions].maxTimeMS = value;
     return this;
   }
 
@@ -289,7 +340,7 @@ export class FindCursor extends AbstractCursor {
    * @param value - The field projection object.
    */
   project(value: Document): this {
-    this.options.projection = value;
+    this[kBuiltOptions].projection = value;
     return this;
   }
 
@@ -300,11 +351,11 @@ export class FindCursor extends AbstractCursor {
    * @param direction - The direction of the sorting (1 or -1).
    */
   sort(sort: Sort | string, direction?: SortDirection): this {
-    if (this.options.tailable) {
+    if (this[kBuiltOptions].tailable) {
       throw new MongoError('Tailable cursor does not support sorting');
     }
 
-    this.options.sort = formatSort(sort, direction);
+    this[kBuiltOptions].sort = formatSort(sort, direction);
     return this;
   }
 
@@ -314,7 +365,7 @@ export class FindCursor extends AbstractCursor {
    * @param value - The cursor collation options (MongoDB 3.4 or higher) settings for update operation (see 3.4 documentation for available fields).
    */
   collation(value: CollationOptions): this {
-    this.options.collation = value;
+    this[kBuiltOptions].collation = value;
     return this;
   }
 
@@ -324,7 +375,7 @@ export class FindCursor extends AbstractCursor {
    * @param value - The limit for the cursor query.
    */
   limit(value: number): this {
-    if (this.options.tailable) {
+    if (this[kBuiltOptions].tailable) {
       throw new MongoError('Tailable cursor does not support limit');
     }
 
@@ -332,7 +383,7 @@ export class FindCursor extends AbstractCursor {
       throw new MongoError('limit requires an integer');
     }
 
-    this.options.limit = value;
+    this[kBuiltOptions].limit = value;
     return this;
   }
 
@@ -342,7 +393,7 @@ export class FindCursor extends AbstractCursor {
    * @param value - The skip for the cursor query.
    */
   skip(value: number): this {
-    if (this.options.tailable) {
+    if (this[kBuiltOptions].tailable) {
       throw new MongoError('Tailable cursor does not support skip');
     }
 
@@ -350,7 +401,7 @@ export class FindCursor extends AbstractCursor {
       throw new MongoError('skip requires an integer');
     }
 
-    this.options.skip = value;
+    this[kBuiltOptions].skip = value;
     return this;
   }
 }

@@ -659,25 +659,6 @@ export class Collection implements OperationParent {
   }
 
   /**
-   * Creates a cursor for a query that can be used to iterate over results from MongoDB
-   *
-   * @param filter - The query predicate. If unspecified, then all documents in the collection will match the predicate
-   */
-  findWithFindCursor(): FindCursor;
-  findWithFindCursor(filter: Document): FindCursor;
-  findWithFindCursor(filter: Document, options: FindOptions): FindCursor;
-  findWithFindCursor(filter?: Document, options?: FindOptions): FindCursor {
-    if (arguments.length > 2) {
-      throw new TypeError('Third parameter to `collection.find()` must be undefined');
-    }
-    if (typeof options === 'function') {
-      throw new TypeError('`options` parameter must not be function');
-    }
-
-    return new FindCursor(getTopology(this), this.s.namespace, filter, options);
-  }
-
-  /**
    * Returns the options of the collection.
    *
    * @param options - Optional settings for the command
